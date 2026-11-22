@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Name=System Monitor
+Comment=View resource usage and manage running processes
+Exec=system-monitor
+Icon=system-monitor
+Terminal=false
+Type=Application
+Categories=System;Monitor;
+Keywords=CPU;Memory;Network;Disk;Processes;
+StartupNotify=true
