@@ -10,9 +10,12 @@
 #include "csd_frame.hpp"
 #include "theme.hpp"
 #include "system_telemetry.hpp"
+#include <obsidian/theme_client.hpp>
 
+#include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <mutex>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -28,7 +31,7 @@ struct SelectionTarget {
 class SystemMonitorApp {
 public:
     explicit SystemMonitorApp(Monitor& monitor, float width = 907.0f, float height = 600.0f, bool dark_mode = false);
-    ~SystemMonitorApp() = default;
+    ~SystemMonitorApp();
 
     void set_window_and_platform(nisaba::backend_os::Window* win, nisaba::backend_os::Platform* plat);
 
@@ -62,10 +65,18 @@ private:
     float height_{600.0f};
     UnitScale scale_;
 
-    // Standalone Obsidian Theme Engine (Light & Dark Mode)
+    // Obsidian Theme Manager Integration (Own Light/Dark + Shell Live Monet Seed + Apps Opacity)
     bool dark_mode_{false};
     AppTheme theme_{AppTheme::light()};
     AppTheme target_theme_{AppTheme::light()};
+    float window_opacity_{0.85f};
+    float target_window_opacity_{0.85f};
+    obsidian::ThemeClient theme_client_;
+    std::mutex theme_ev_mutex_;
+    obsidian::ThemeEvent pending_theme_ev_{};
+    std::atomic<bool> theme_ev_dirty_{false};
+
+    void apply_system_theme(const obsidian::ThemeEvent& ev);
 
     // Subtle header theme toggle button (Sun / Moon) at top-right of titlebar
     nisaba::Rect rect_theme_toggle_{};

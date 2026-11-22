@@ -189,19 +189,29 @@ float CsdFrame::get_titlebar_height(const UnitScale& scale) const noexcept {
 }
 
 void CsdFrame::render_frame_background(nisaba::gpu::GpuCanvas& canvas, float width, float height,
-                                       const AppTheme& theme, const UnitScale& scale) {
+                                       const AppTheme& theme, const UnitScale& scale,
+                                       float window_opacity) {
     const float r = get_corner_radius(theme, scale);
+    const float eff_op = std::clamp(window_opacity, 0.0f, 1.0f);
     auto win_rect = *nisaba::Rect::from_xywh(0.0f, 0.0f, width, height);
+    nisaba::Color bg = detail::with_alpha(theme.background, eff_op);
 
     if (!is_maximized_) {
-        canvas.fill_round_rect(win_rect, r, r, nisaba::Paint(theme.background));
+        if (eff_op > 0.002f) {
+            canvas.fill_round_rect(win_rect, r, r, nisaba::Paint(bg));
+        }
 
-        nisaba::Color border_col = theme.darkMode
-            ? nisaba::Color::from_rgba8(255, 255, 255, 24)
-            : nisaba::Color::from_rgba8(0, 0, 0, 22);
-        canvas.stroke_round_rect(win_rect, r, r, nisaba::Paint(border_col), nisaba::Stroke{1.0f});
+        uint8_t rim_a = static_cast<uint8_t>(std::round((theme.darkMode ? 24.0f : 22.0f) * std::clamp(eff_op / 0.30f, 0.0f, 1.0f)));
+        if (rim_a > 0) {
+            nisaba::Color border_col = theme.darkMode
+                ? nisaba::Color::from_rgba8(255, 255, 255, rim_a)
+                : nisaba::Color::from_rgba8(0, 0, 0, rim_a);
+            canvas.stroke_round_rect(win_rect, r, r, nisaba::Paint(border_col), nisaba::Stroke{1.0f});
+        }
     } else {
-        canvas.fill_rect(win_rect, nisaba::Paint(theme.background));
+        if (eff_op > 0.002f) {
+            canvas.fill_rect(win_rect, nisaba::Paint(bg));
+        }
     }
 }
 

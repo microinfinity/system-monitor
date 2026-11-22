@@ -66,8 +66,41 @@ SystemMonitorApp::SystemMonitorApp(Monitor& monitor, float width, float height, 
     target_theme_ = dark_mode_ ? AppTheme::dark() : AppTheme::light();
     theme_ = target_theme_;
 
+    // Connect live to Obsidian Theme Manager ($XDG_RUNTIME_DIR/obsidian-shell.sock)
+    // Uses app's own Dark/Light palettes, and pulls Live Monet seed from Shell in "live" mode.
+    theme_client_.start([this](const obsidian::ThemeEvent& ev) {
+        std::lock_guard<std::mutex> lock(theme_ev_mutex_);
+        pending_theme_ev_ = ev;
+        theme_ev_dirty_.store(true, std::memory_order_release);
+    });
+    // Snap initial system theme & apps opacity immediately without startup flash
+    apply_system_theme(theme_client_.snapshot());
+    theme_ = target_theme_;
+    window_opacity_ = target_window_opacity_;
+    theme_ev_dirty_.store(false, std::memory_order_release);
+
     seg_plate_pos_ = static_cast<float>(monitor_.scope());
     selection_.application = (monitor_.scope() == 0);
+}
+
+SystemMonitorApp::~SystemMonitorApp() {
+    theme_client_.stop();
+}
+
+void SystemMonitorApp::apply_system_theme(const obsidian::ThemeEvent& ev) {
+    target_window_opacity_ = std::clamp(ev.apps_opacity, 0.0f, 1.0f);
+    if (ev.is_light()) {
+        dark_mode_ = false;
+        target_theme_ = AppTheme::light();
+    } else if (ev.is_live()) {
+        dark_mode_ = true;
+        uint8_t r = 80, g = 227, b = 194;
+        obsidian::ThemeEvent::parse_hex_rgb(ev.live_seed, r, g, b);
+        target_theme_ = AppTheme::live(r, g, b);
+    } else {
+        dark_mode_ = true;
+        target_theme_ = AppTheme::dark();
+    }
 }
 
 void SystemMonitorApp::set_window_and_platform(nisaba::backend_os::Window* win, nisaba::backend_os::Platform* plat) {
@@ -195,7 +228,18 @@ std::string SystemMonitorApp::format_running_time(const ProcessRecord& proc) con
 void SystemMonitorApp::update(float dt) {
     monitor_.tick();
 
+    // Drain live theme events from obsidian-shell.sock safely on the main GUI thread
+    if (theme_ev_dirty_.exchange(false, std::memory_order_acq_rel)) {
+        obsidian::ThemeEvent ev;
+        {
+            std::lock_guard<std::mutex> lock(theme_ev_mutex_);
+            ev = pending_theme_ev_;
+        }
+        apply_system_theme(ev);
+    }
+
     theme_ = AppTheme::lerp(theme_, target_theme_, std::min(1.0f, dt * 14.0f));
+    window_opacity_ += (target_window_opacity_ - window_opacity_) * std::min(1.0f, dt * 12.0f);
     csd_frame_.update(dt);
 
     // SegmentedControl damped spring physics (src/ui/segmented_control.cpp: kGlideResponse = 0.3, kStretch = 0.08)
@@ -258,8 +302,8 @@ void SystemMonitorApp::render(nisaba::gpu::GpuCanvas& canvas) {
     const float header_h = 48.0f * u;
     const float header_baseline = 28.0f * u;
 
-    // 1. Window Surface Background (theme.background: #F5F6FA Light / #1C1C1D Dark, radius 14)
-    csd_frame_.render_frame_background(canvas, width_, height_, theme_, scale_);
+    // 1. Window Surface Background (synced live with Obsidian Apps Opacity slider)
+    csd_frame_.render_frame_background(canvas, width_, height_, theme_, scale_, window_opacity_);
 
     // Clip all interior views to the window's rounded corners when not maximized
     canvas.save();

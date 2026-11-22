@@ -189,6 +189,62 @@ struct AppTheme {
         return t;
     }
 
+    /// Live Monet Dynamic Theme (`AppTheme::live(r, g, b)`) matching Obsidian Shell's exact HSL Monet engine
+    [[nodiscard]] static AppTheme live(uint8_t seed_r, uint8_t seed_g, uint8_t seed_b) noexcept {
+        float rf = static_cast<float>(seed_r) / 255.0f;
+        float gf = static_cast<float>(seed_g) / 255.0f;
+        float bf = static_cast<float>(seed_b) / 255.0f;
+        float cmax = std::max({rf, gf, bf});
+        float cmin = std::min({rf, gf, bf});
+        float delta = cmax - cmin;
+        float h = 190.0f, s = 0.0f, l = (cmax + cmin) * 0.5f;
+        if (delta > 1e-4f) {
+            s = (l > 0.5f) ? (delta / (2.0f - cmax - cmin)) : (delta / (cmax + cmin));
+            if (cmax == rf)      h = 60.0f * std::fmod(((gf - bf) / delta) + 6.0f, 6.0f);
+            else if (cmax == gf) h = 60.0f * (((bf - rf) / delta) + 2.0f);
+            else                 h = 60.0f * (((rf - gf) / delta) + 4.0f);
+        }
+
+        auto hsl = [](float hh, float ss, float ll, uint8_t a = 255) -> nisaba::Color {
+            float c = (1.0f - std::abs(2.0f * ll - 1.0f)) * ss;
+            float x = c * (1.0f - std::abs(std::fmod(hh / 60.0f, 2.0f) - 1.0f));
+            float m = ll - c * 0.5f;
+            float r1 = 0, g1 = 0, b1 = 0;
+            if      (hh < 60.0f)  { r1 = c; g1 = x; }
+            else if (hh < 120.0f) { r1 = x; g1 = c; }
+            else if (hh < 180.0f) { g1 = c; b1 = x; }
+            else if (hh < 240.0f) { g1 = x; b1 = c; }
+            else if (hh < 300.0f) { r1 = x; b1 = c; }
+            else                  { r1 = c; b1 = x; }
+            auto ch = [m](float v) { return static_cast<uint8_t>(std::clamp((v + m) * 255.0f + 0.5f, 0.0f, 255.0f)); };
+            return nisaba::Color::from_rgba8(ch(r1), ch(g1), ch(b1), a);
+        };
+
+        bool is_achromatic = (s < 0.07f);
+        float accent_h = is_achromatic ? 205.0f : h;
+        float sec_h    = is_achromatic ? 215.0f : std::fmod(h + 15.0f, 360.0f);
+        float sec_s    = is_achromatic ? 0.20f : std::clamp(s * 1.08f, 0.65f, 0.86f);
+        float surf_s   = is_achromatic ? 0.06f : std::clamp(s * 0.48f, 0.24f, 0.45f);
+
+        AppTheme t = dark();
+        t.darkMode              = true;
+        t.background            = hsl(accent_h, surf_s, 0.065f);
+        t.secondBackground      = hsl(accent_h, surf_s, 0.098f);
+        t.alternateBackground   = hsl(accent_h, surf_s, 0.140f);
+        t.text                  = hsl(accent_h, is_achromatic ? 0.04f : 0.16f, 0.96f);
+        t.disabledText          = hsl(accent_h, is_achromatic ? 0.06f : 0.20f, 0.72f);
+        t.highlight             = hsl(sec_h,    sec_s,  0.68f);
+        t.highlightedText       = hsl(accent_h, 0.42f,  0.08f);
+        t.separator             = detail::with_alpha(t.highlight, 0.16f);
+        t.headerSeparator       = detail::with_alpha(t.highlight, 0.12f);
+        t.segmentedControlTrack = hsl(accent_h, surf_s, 0.115f);
+        t.segmentedControlPlate = hsl(accent_h, surf_s * 0.9f, 0.22f);
+        t.textFieldFocusRing    = detail::with_alpha(t.highlight, 0.30f);
+        t.alertBackground       = t.secondBackground;
+        t.menuHighlight         = detail::with_alpha(t.highlight, 0.85f);
+        return t;
+    }
+
     /// Smooth interpolation between Light and Dark themes
     [[nodiscard]] static AppTheme lerp(const AppTheme& a, const AppTheme& b, float t) noexcept {
         AppTheme res = (t < 0.5f) ? a : b;

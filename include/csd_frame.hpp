@@ -33,7 +33,8 @@ public:
 
     /// Renders the main window rounded surface (windowRadius = 14) and subtle outer rim/shadow
     void render_frame_background(nisaba::gpu::GpuCanvas& canvas, float width, float height,
-                                 const AppTheme& theme, const UnitScale& scale);
+                                 const AppTheme& theme, const UnitScale& scale,
+                                 float window_opacity = 0.85f);
 
     /// Renders the Obsidian header bar (48px height), top-left window controls (Close, Minimize, Maximize),
     /// and the page title at x = 252, baseline = 28.
